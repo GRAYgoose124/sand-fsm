@@ -1,45 +1,42 @@
-import itertools
-import functools
-import random
-from collections.abc import Iterator
+from functools import reduce
+
+from machine import Rand, Substitution
 
 
-class Machine(Iterator):
+def take(It, n):
+    for _ in range(n):
+        yield next(It)
+
+
+class DNA(Rand):
     def __init__(self):
-        self.state = None
-        self.rules = []
+        self.state = ""
+        self.rules = ["A", "G", "T", "C"]
 
-    def __next__(self):
-        raise NotImplementedError
-
-
-class RandMachine(Machine):
-    def __next__(self):
-        for next_state, probability in self.rules:
-            if random.uniform(0, 1) > probability:
-                self.state += next_state
-                break
-
-        return self.state
+    # def __next__(self):
+    #     self.state += super().__next__()
+    #     return self.state
 
 
-class DNA(RandMachine):
+class DNA2MRNA(Substitution):
     def __init__(self, initial_state):
         self.state = initial_state
-        self.rules = [("A", 0.25),
-                      ("G", 0.25),
-                      ("T", 0.25),
-                      ("C", 0.25)]
+        self.rules = [("G", "C"),
+                      ("C", "G"),
+                      ("T", "A"),
+                      ("A", "U")]
 
 
-class Walk(RandMachine):
-    def __init__(self, initial_state):
-        self.state = initial_state
-        self.rules = [(1, 0.5),
-                      (-1, 0.5)]
+class Walk(Rand):
+    def __init__(self):
+        self.rules = [1, -1]
 
 
 if __name__ == '__main__':
-    walker = Walk(0)
-    for step in walker:
-        print(step)
+    # print(reduce(lambda x, y: x+y, take(Walk(), 10)))
+
+    a = "".join(list(take(DNA(), 10)))
+    print(a)
+
+    b = DNA2MRNA(a)
+    print(next(b))
