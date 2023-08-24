@@ -131,7 +131,6 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
 
         def update(i):
             ax.clear()
-
             self.step(path[i], verbose=True)
             self.draw(ax=ax, pos=pos)
             ax.set_title(f"Step {i}: {self.current_state}")
