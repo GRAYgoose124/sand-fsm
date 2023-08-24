@@ -1,7 +1,9 @@
 from abc import ABC, ABCMeta, abstractmethod
+from pathlib import Path
 from typing import NamedTuple
 from matplotlib import pyplot as plt
 import networkx as nx
+import matplotlib.animation as animation
 
 
 class GraphHistory(list):
@@ -25,6 +27,7 @@ class PathResult(NamedTuple):
 class StateGraph(nx.DiGraph, metaclass=ABCMeta):
     START_STATE = "_S_"
     END_STATE = "_E_"
+    STATE_TYPE = str
 
     def __init__(self, autobuild=True):
         super().__init__()
@@ -69,14 +72,14 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
             )
 
         if self.done:
-            return False
+            return None
 
         if self.can_step(action):
             self.history.append(action)
 
-            return True
+            return self
         else:
-            return False
+            return None
 
     def take_path(self, path, reset=True):
         if self.done:
@@ -97,6 +100,45 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
             self.reset()
 
         return r
+
+    def draw(self, *args, autoshow=False, save_img: Path | None = None, **kwargs):
+        """Draw the graph using networkx"""
+        # make the current node red
+        node_colors = ["red" if n == self.current_state else "blue" for n in self.nodes]
+        # make the links taken green
+        edge_colors = [
+            "green" if (u, v) in zip(self.history[:-1], self.history[1:]) else "black"
+            for u, v in self.edges
+        ]
+
+        nx.draw_networkx(
+            self, *args, node_color=node_colors, edge_color=edge_colors, **kwargs
+        )
+
+        if save_img:
+            plt.savefig(save_img)
+            plt.close()
+
+        if autoshow:
+            plt.show()
+
+    def animate(self, path: list[STATE_TYPE]):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+
+        # generate affixed positions for the nodes
+        pos = nx.spring_layout(self)
+
+        def update(i):
+            ax.clear()
+
+            self.step(path[i], verbose=True)
+            self.draw(ax=ax, pos=pos)
+            ax.set_title(f"Step {i}: {self.current_state}")
+
+        return animation.FuncAnimation(
+            fig, update, frames=len(self), interval=1000, repeat=True
+        )
 
 
 class MSG(StateGraph):
@@ -122,7 +164,7 @@ def sparse_builder(G=MSG(), connectivity=0.5, nodes=10):
 
     for i in range(nodes):
         for j in range(nodes):
-            if i != j and (i + j) % (1 / connectivity) == 0:
+            if i != j and abs(i - j) % (1 / connectivity) == 0:
                 G.add_edge(i, j)
 
     return G
@@ -132,22 +174,26 @@ def basic_fsm_demo():
     fsm = MSG()
 
     path = ["A", "B", "C", "A", "D", StateGraph.END_STATE]
-    result = fsm.take_path(path, reset=False)
-    print(f"{result}\nHistory: {fsm.history} (Should match path_taken)")
+    # result = fsm.take_path(path, reset=False)
+    # print(f"{result}\nHistory: {fsm.history} (Should match path_taken)")
 
-    fsm.reset()
-    fsm.take_path(result.path_taken)
-    print(
-        f"Post reset: (using the old path taken as input)\n{result}\nHistory: {fsm.history} (Should match path_taken)"
-    )
+    # fsm.reset()
+    # fsm.take_path(result.path_taken)
+    # print(
+    #     f"Post reset: (using the old path taken as input)\n{result}\nHistory: {fsm.history} (Should match path_taken)"
+    # )
+
+    # Lets use FuncAnimation to animate the graph
+    ani = fsm.animate(path)
+    ani.save("basic_fsm_demo.gif", writer="imagemagick", fps=1)
 
 
 def main():
     basic_fsm_demo()
 
-    G = sparse_builder()
-    nx.draw_networkx(G)
-    plt.show()
+    # G = sparse_builder()
+    # nx.draw_networkx(G)
+    # plt.show()
 
 
 if __name__ == "__main__":

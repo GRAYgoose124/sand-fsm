@@ -1,7 +1,5 @@
 # FSM 
 
-Random Machine - Rules are weighted by random probability
+Uh, FSM sandbox stuff kek
 
-## TODO
-    networkx graph generation
-    
+![](https://github.com/GRAYgoose124/sand-fsm/blob/master/basic_fsm_demo.gif?raw=True)
