@@ -1,5 +1,8 @@
 from collections.abc import Iterator
+from functools import reduce
+from itertools import islice
 from random import randint
+
 
 def take(it, n):
     return list(islice(it, n))
@@ -16,7 +19,7 @@ class Machine(Iterator):
 
 class Rand(Machine):
     def __next__(self):
-        return self.rules[randint(0, len(self.rules)-1)]
+        return self.rules[randint(0, len(self.rules) - 1)]
 
 
 class CharSub(Machine):
@@ -37,16 +40,13 @@ class StrSub(Machine):
         pass
 
 
-if __name__ == '__main__':
-    walk = reduce(lambda x, y: x+y, take(Rand(0, [1, -1]), 1000))
+if __name__ == "__main__":
+    walk = reduce(lambda x, y: x + y, take(Rand(0, [1, -1]), 1000))
     print(walk)
 
     dna = "".join(take(Rand("", ["A", "T", "G", "C"]), 10))
     print(dna)
 
-    mrna = next(CharSub(dna, [("G", "C"),
-                              ("C", "G"),
-                              ("T", "A"),
-                              ("A", "U")]))
+    mrna = next(CharSub(dna, [("G", "C"), ("C", "G"), ("T", "A"), ("A", "U")]))
 
     print(mrna)
