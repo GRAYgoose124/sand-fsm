@@ -1,16 +1,17 @@
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from typing import NamedTuple
-import networkx
+from matplotlib import pyplot as plt
+import networkx as nx
 
 
 class GraphHistory(list):
     def __str__(self):
-        return " -> ".join(self)
+        return "GraphHistory[{}]".format(" -> ".join(self))
 
 
 class PathResult(NamedTuple):
     success_tuple: tuple[bool, str | None]
-    path: GraphHistory
+    path_taken: GraphHistory
 
     @property
     def success(self):
@@ -21,14 +22,14 @@ class PathResult(NamedTuple):
         return self.success_tuple[1]
 
 
-class StateGraph(ABC):
+class StateGraph(nx.DiGraph, metaclass=ABCMeta):
     START_STATE = "_S_"
     END_STATE = "_E_"
 
     def __init__(self, autobuild=True):
-        self.graph = networkx.DiGraph()
-        self.graph.add_node(StateGraph.START_STATE)
-        self.graph.add_node(StateGraph.END_STATE)
+        super().__init__()
+        self.add_node(StateGraph.START_STATE)
+        self.add_node(StateGraph.END_STATE)
 
         self.history = GraphHistory()
 
@@ -46,7 +47,7 @@ class StateGraph(ABC):
 
     @property
     def actions(self):
-        return self.graph[self.current_state]
+        return self[self.current_state]
 
     @property
     def current_state(self):
@@ -78,36 +79,29 @@ class StateGraph(ABC):
             return False
 
     def take_path(self, path, reset=True):
-        old_history = self.history.copy()
         if self.done:
             if reset:
                 self.reset()
             else:
-                return PathResult((False, None), old_history)
+                return PathResult((False, None), self.history)
 
         r = None
         for i, action in enumerate(path):
             if not self.step(action):
-                r = PathResult((False, action), old_history)
+                r = PathResult((False, action), self.history)
 
         if r is None:
-            r = PathResult((self.done, None), old_history)
+            r = PathResult((self.done, None), self.history)
 
         if reset:
             self.reset()
 
         return r
 
-    def __str__(self):
-        return str(self.graph)
-
-    def __repr__(self):
-        return str(self.graph)
-
 
 class MSG(StateGraph):
     def build(self):
-        self.graph.add_edges_from(
+        self.add_edges_from(
             [
                 (StateGraph.START_STATE, "A"),
                 ("A", "B"),
@@ -122,12 +116,38 @@ class MSG(StateGraph):
         )
 
 
-def main():
+def sparse_builder(G=MSG(), connectivity=0.5, nodes=10):
+    for i in range(nodes):
+        G.add_node(i)
+
+    for i in range(nodes):
+        for j in range(nodes):
+            if i != j and (i + j) % (1 / connectivity) == 0:
+                G.add_edge(i, j)
+
+    return G
+
+
+def basic_fsm_demo():
     fsm = MSG()
 
     path = ["A", "B", "C", "A", "D", StateGraph.END_STATE]
-    print(fsm.take_path(path, reset=False).success)
-    print(fsm.history)
+    result = fsm.take_path(path, reset=False)
+    print(f"{result}\nHistory: {fsm.history} (Should match path_taken)")
+
+    fsm.reset()
+    fsm.take_path(result.path_taken)
+    print(
+        f"Post reset: (using the old path taken as input)\n{result}\nHistory: {fsm.history} (Should match path_taken)"
+    )
+
+
+def main():
+    basic_fsm_demo()
+
+    G = sparse_builder()
+    nx.draw_networkx(G)
+    plt.show()
 
 
 if __name__ == "__main__":
