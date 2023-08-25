@@ -134,6 +134,8 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
     def animate(
         self, path: list[STATE_TYPE], autoshow=False, save_img: Path | None = None
     ):
+        self.reset()
+
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
@@ -147,7 +149,7 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
             ax.set_title(f"Step {i}: {self.current_state}")
 
         ani = animation.FuncAnimation(
-            fig, update, frames=len(self), interval=1000, repeat=True
+            fig, update, frames=len(path), interval=1000, repeat=True
         )
 
         if save_img:
@@ -184,7 +186,11 @@ class AutoSG(StateGraph):
     START_STATE = "_S_"
     END_STATE = "_E_"
 
+    # please dear god make sure labeler is ordered
     def build(self, n=10, target_avg_degree=5, labeler=str, graph_type="random"):
+        first = labeler(0)
+        last = labeler(n - 1)
+
         for i in range(n):
             self.add_node(labeler(i))
 
@@ -200,6 +206,14 @@ class AutoSG(StateGraph):
             self.build_star_graph(n, labeler)
         else:
             print("Unknown graph type!")
+
+        nlist = list(self.nodes)
+        # if start and end's don't have at least 1 edge, add one
+        if self.degree(StateGraph.END_STATE) == 0:
+            self.add_edge(last, StateGraph.END_STATE)
+
+        if self.degree(StateGraph.START_STATE) == 0:
+            self.add_edge(StateGraph.START_STATE, first)
 
         return self
 
@@ -254,8 +268,11 @@ def fsm_animate_demo():
     fsm = MSG()
     path = ["A", "B", "C", "A", "D", StateGraph.END_STATE]
     ani = fsm.animate(path, save_img=Path("basic_fsm_demo.gif"))
-
+    plt.close()
     print(fsm.cycle_detect(path))
+
+    path = nx.shortest_path(fsm, StateGraph.START_STATE, StateGraph.END_STATE)
+    ani = fsm.animate(path, save_img=Path("basic_fsm_demo_shortest.gif"))
     plt.close()
 
 
@@ -272,16 +289,7 @@ def basic_fsm_demo():
     )
 
 
-def main():
-    # basic_fsm_demo()
-    # fsm_animate_demo()
-
-    # Sparse test
-    # G = sparse_builder()
-    # nx.draw_networkx(G)
-    # plt.show()
-
-    # AutoSG
+def autosg_demo():
     types = ["random", "cycle", "star", "grid", "complete"]
 
     for t in types:
@@ -290,6 +298,26 @@ def main():
         pos = nx.spring_layout(G)
         nx.draw_networkx(G, pos=pos)
         plt.savefig(f"autosg_{t}.png")
+        try:
+            p = nx.shortest_path(G, StateGraph.START_STATE, StateGraph.END_STATE)
+            G.animate(p, save_img=Path(f"autosg_{t}_shortest_walk.gif"))
+        except nx.exception.NetworkXNoPath:
+            print(
+                f"Graph {t} has no path from start to end! Dang dirty directed graphs!"
+            )
+
+
+def main():
+    # basic_fsm_demo()
+    fsm_animate_demo()
+
+    # Sparse test
+    # G = sparse_builder()
+    # nx.draw_networkx(G)
+    # plt.show()
+
+    # AutoSG
+    autosg_demo()
 
 
 if __name__ == "__main__":
