@@ -1,4 +1,5 @@
 from abc import ABC, ABCMeta, abstractmethod
+from itertools import combinations
 from pathlib import Path
 from typing import NamedTuple
 from matplotlib import pyplot as plt
@@ -81,7 +82,16 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
         else:
             return None
 
-    def take_path(self, path, reset=True):
+    def cycle_detect(self, path=None):
+        """if path is given, it only returns cycles actually in path, that is, a cycle taken."""
+        cycle = nx.find_cycle(self, path)
+        if path:
+            # flatten list[tuple] to list and compare to path
+            return [n for n, _ in cycle if n in path]
+        else:
+            return cycle
+
+    def walk(self, path, reset=True):
         if self.done:
             if reset:
                 self.reset()
@@ -117,12 +127,13 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
 
         if save_img:
             plt.savefig(save_img)
-            plt.close()
 
         if autoshow:
             plt.show()
 
-    def animate(self, path: list[STATE_TYPE]):
+    def animate(
+        self, path: list[STATE_TYPE], autoshow=False, save_img: Path | None = None
+    ):
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
@@ -135,9 +146,18 @@ class StateGraph(nx.DiGraph, metaclass=ABCMeta):
             self.draw(ax=ax, pos=pos)
             ax.set_title(f"Step {i}: {self.current_state}")
 
-        return animation.FuncAnimation(
+        ani = animation.FuncAnimation(
             fig, update, frames=len(self), interval=1000, repeat=True
         )
+
+        if save_img:
+            ani.save(save_img, writer="imagemagick", fps=1)
+
+        if autoshow:
+            # Note: broken for some reason
+            plt.show()
+
+        return ani
 
 
 class MSG(StateGraph):
@@ -157,6 +177,67 @@ class MSG(StateGraph):
         )
 
 
+from random import randint, choice
+
+
+class AutoSG(StateGraph):
+    START_STATE = "_S_"
+    END_STATE = "_E_"
+
+    def build(self, n=10, target_avg_degree=5, labeler=str, graph_type="random"):
+        for i in range(n):
+            self.add_node(labeler(i))
+
+        if graph_type == "random":
+            self.build_random_graph(n, target_avg_degree, labeler)
+        elif graph_type == "cycle":
+            self.build_cycle_graph(n, labeler)
+        elif graph_type == "complete":
+            self.build_complete_graph(n, labeler)
+        elif graph_type == "grid":
+            self.build_grid_graph(n, labeler)
+        elif graph_type == "star":
+            self.build_star_graph(n, labeler)
+        else:
+            print("Unknown graph type!")
+
+        return self
+
+    def build_random_graph(self, n, target_avg_degree, labeler):
+        for i in range(n):
+            for j in range(i + 1, n):
+                if randint(0, n) < target_avg_degree:
+                    self.add_edge(labeler(i), labeler(j))
+
+    def build_cycle_graph(self, n, labeler):
+        for i in range(n):
+            self.add_edge(labeler(i), labeler((i + 1) % n))
+
+    def build_complete_graph(self, n, labeler):
+        for i in range(n):
+            for j in range(i + 1, n):
+                self.add_edge(labeler(i), labeler(j))
+
+    def build_grid_graph(self, n, labeler):
+        side = int(n**0.5)
+        for i in range(side):
+            for j in range(side):
+                cur = i * side + j
+                if i > 0:
+                    self.add_edge(labeler(cur), labeler(cur - side))
+                if i < side - 1:
+                    self.add_edge(labeler(cur), labeler(cur + side))
+                if j > 0:
+                    self.add_edge(labeler(cur), labeler(cur - 1))
+                if j < side - 1:
+                    self.add_edge(labeler(cur), labeler(cur + 1))
+
+    def build_star_graph(self, n, labeler):
+        center = labeler(0)
+        for i in range(1, n):
+            self.add_edge(center, labeler(i))
+
+
 def sparse_builder(G=MSG(), connectivity=0.5, nodes=10):
     for i in range(nodes):
         G.add_node(i)
@@ -169,30 +250,46 @@ def sparse_builder(G=MSG(), connectivity=0.5, nodes=10):
     return G
 
 
+def fsm_animate_demo():
+    fsm = MSG()
+    path = ["A", "B", "C", "A", "D", StateGraph.END_STATE]
+    ani = fsm.animate(path, save_img=Path("basic_fsm_demo.gif"))
+
+    print(fsm.cycle_detect(path))
+    plt.close()
+
+
 def basic_fsm_demo():
     fsm = MSG()
-
     path = ["A", "B", "C", "A", "D", StateGraph.END_STATE]
-    # result = fsm.take_path(path, reset=False)
-    # print(f"{result}\nHistory: {fsm.history} (Should match path_taken)")
+    result = fsm.take_path(path, reset=False)
+    print(f"{result}\nHistory: {fsm.history} (Should match path_taken)")
 
-    # fsm.reset()
-    # fsm.take_path(result.path_taken)
-    # print(
-    #     f"Post reset: (using the old path taken as input)\n{result}\nHistory: {fsm.history} (Should match path_taken)"
-    # )
-
-    # Lets use FuncAnimation to animate the graph
-    ani = fsm.animate(path)
-    ani.save("basic_fsm_demo.gif", writer="imagemagick", fps=1)
+    fsm.reset()
+    fsm.walk(result.path_taken)
+    print(
+        f"Post reset: (using the old path taken as input)\n{result}\nHistory: {fsm.history} (Should match path_taken)"
+    )
 
 
 def main():
-    basic_fsm_demo()
+    # basic_fsm_demo()
+    # fsm_animate_demo()
 
+    # Sparse test
     # G = sparse_builder()
     # nx.draw_networkx(G)
     # plt.show()
+
+    # AutoSG
+    types = ["random", "cycle", "star", "grid", "complete"]
+
+    for t in types:
+        plt.close()
+        G = AutoSG().build(n=40, target_avg_degree=5, graph_type=t)
+        pos = nx.spring_layout(G)
+        nx.draw_networkx(G, pos=pos)
+        plt.savefig(f"autosg_{t}.png")
 
 
 if __name__ == "__main__":
